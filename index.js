@@ -1,3 +1,7 @@
+// TODO: handle partial input
+// TODO: handle error cases properly, proper error messages and structures
+// TODO: validate parser params properly, eg. sequenceOf should have at least one parser
+
 const ParserStateStatus = /**@type{const}*/({
   COMPLETE: "complete",
   PARTIAL: "partial",
@@ -183,6 +187,27 @@ function sequenceOf(...parsers) {
   })
 }
 
+/**
+  * @template {Parser[]} T
+  * @param {T} parsers
+  */
+function oneOf(...parsers) {
+  return new Parser(parserState => {
+    let firstErrorState = null
+    for(let i = 0; i < parsers.length; i++) {
+      const nextState = /** @type {ParserState<ParserType<T[number]>>} */(parsers[i].transform(parserState))
+      if(isErrorState(nextState)) {
+        firstErrorState ??= nextState
+        continue
+      }
+
+      return nextState
+    }
+
+    return firstErrorState
+  })
+}
+
 // {
 //   const parser = literal("Hello")
 //   console.log(parser.parseString("Hell"))
@@ -190,15 +215,26 @@ function sequenceOf(...parsers) {
 //   console.log(parser.parseString("Hi, world!"))
 // }
 
+// {
+//   const parser = sequenceOf(
+//     literal("Hello"),
+//     literal(", "),
+//     literal("world"),
+//     literal("!"),
+//   )
+//   console.log(parser.parseString("Hell"))
+//   console.log(parser.parseString("Hello"))
+//   console.log(parser.parseString("Hello, world!"))
+//   console.log(parser.parseString("Hi, world!"))
+// }
+
 {
-  const parser = sequenceOf(
+  const parser = oneOf(
     literal("Hello"),
-    literal(", "),
-    literal("world"),
-    literal("!"),
+    literal("Hi"),
   )
+
   console.log(parser.parseString("Hell"))
-  console.log(parser.parseString("Hello"))
   console.log(parser.parseString("Hello, world!"))
   console.log(parser.parseString("Hi, world!"))
 }
