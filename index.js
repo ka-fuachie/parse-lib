@@ -7,13 +7,14 @@ const ParserStateStatus = /**@type{const}*/({
 /** @typedef {typeof ParserStateStatus[keyof typeof ParserStateStatus]} ParserStateStatusType */
 
 /**
+  * @template [T = any]
   * @typedef {Object} SuccessParserState
   * @property {Object} input
   * @property {string} input.value
   * @property {boolean} input.done
   * @property {number} index
   * @property {Exclude<ParserStateStatusType, "error">} status
-  * @property {any} result
+  * @property {T} result
   * @property {null} error
   * @property {Map<Parser, Map<number, ParserResult>>} cacheMap
   */
@@ -31,17 +32,20 @@ const ParserStateStatus = /**@type{const}*/({
   */
 
 /**
-  * @typedef {SuccessParserState | ErrorParserState} ParserState
+  * @template [T = any]
+  * @typedef {SuccessParserState<T> | ErrorParserState} ParserState
   */
 
 /**
-  * @typedef {Pick<ParserState, "index" | "status" | "error" | "result">} ParserResult
+  * @template [T = any]
+  * @typedef {Pick<ParserState<T>, "index" | "status" | "error" | "result">} ParserResult
   */
 
 /**
+  * @template T
   * @callback StateTransformFn
   * @param {SuccessParserState} parserState
-  * @returns {ParserState}
+  * @returns {ParserState<T>}
   */
 
 /**
@@ -52,12 +56,13 @@ function isErrorState(state) {
   return state.status === ParserStateStatus.ERROR
 }
 
+/** @template T */
 class Parser {
-  /** @type {StateTransformFn} */
+  /** @type {StateTransformFn<T>} */
   #stateTransformFn
 
   /**
-    * @param {StateTransformFn} stateTransformFn
+    * @param {StateTransformFn<T>} stateTransformFn
     */
   constructor(stateTransformFn) {
     this.#stateTransformFn = stateTransformFn
@@ -72,6 +77,7 @@ class Parser {
       cache = new Map()
       parserState.cacheMap.set(this, cache)
     }
+    /** @type {ParserResult<T> | undefined} */
     const cachedResult = cache.get(parserState.index)
     if(cachedResult != null) {
       return {
@@ -102,41 +108,97 @@ class Parser {
       cacheMap: new Map(),
     }
 
-    return this.transform(parserState)
+    const nextParserState = this.transform(parserState)
+
+    return /**@satisfies {ParserResult} */({
+      status: nextParserState.status,
+      index: nextParserState.index,
+      error: nextParserState.error,
+      result: nextParserState.result,
+    })
   }
 }
 
-/** @param {string} s */
-function literal(s) {
-  return new Parser(parserState => {
-    const remainingInput = parserState.input.value.slice(parserState.index)
-    if(!parserState.input.done && remainingInput.length < s.length && s.startsWith(remainingInput)) {
-      return {
-        ...parserState,
-        index: parserState.index + remainingInput.length,
-        status: ParserStateStatus.PARTIAL,
-        result: s,
-      }
-    }
+/**
+  * @template {Parser} T
+  * @typedef {T extends Parser<infer U> ? U : never} ParserType
+  */
 
-    if(!parserState.input.value.startsWith(s, parserState.index)) {
+/**
+  * @param {string} text
+  * @returns {Parser<string>}
+  */
+function literal(text) {
+  return new Parser(parserState => {
+    // TODO: handle partial cases
+    // const remainingInput = parserState.input.value.slice(parserState.index)
+    // if(!parserState.input.done && remainingInput.length < text.length && text.startsWith(remainingInput)) {
+    //   return {
+    //     ...parserState,
+    //     index: parserState.index + remainingInput.length,
+    //     status: ParserStateStatus.PARTIAL,
+    //     result: remainingInput,
+    //   }
+    // }
+
+    if(!parserState.input.value.startsWith(text, parserState.index)) {
       return {
         ...parserState,
         status: ParserStateStatus.ERROR,
-        error: new Error(`Expected "${s}", but got "${parserState.input.value.slice(parserState.index, parserState.index + s.length)}"`),
+        error: new Error(`Expected "${text}", but got "${parserState.input.value.slice(parserState.index, parserState.index + text.length)}"`),
       }
     }
 
     return {
       ...parserState,
-      index: parserState.index + s.length,
+      index: parserState.index + text.length,
       status: ParserStateStatus.COMPLETE,
-      result: s,
+      result: text,
     }
   })
 }
 
-const parser = literal("Hello")
-console.log(parser.parseString("Hell"))
-console.log(parser.parseString("Hello, world!"))
-console.log(parser.parseString("Hi, world!"))
+/**
+  * @template {Parser[]} T
+  * @param {T} parsers
+  */
+function sequenceOf(...parsers) {
+  return new Parser(parserState => {
+    let result = /** @type {{[K in keyof T]: ParserType<T[K]>}} */(new Array(parsers.length))
+    
+    /** @type {ParserState} */
+    let currentState = parserState
+    for(let i = 0; i < parsers.length; i++) {
+      currentState = /** @type {ParserState} */(parsers[i].transform(currentState))
+      if(isErrorState(currentState)) {
+        return currentState
+      }
+      result[i] = currentState.result
+    }
+
+    return {
+      ...currentState,
+      result,
+    }
+  })
+}
+
+// {
+//   const parser = literal("Hello")
+//   console.log(parser.parseString("Hell"))
+//   console.log(parser.parseString("Hello, world!"))
+//   console.log(parser.parseString("Hi, world!"))
+// }
+
+{
+  const parser = sequenceOf(
+    literal("Hello"),
+    literal(", "),
+    literal("world"),
+    literal("!"),
+  )
+  console.log(parser.parseString("Hell"))
+  console.log(parser.parseString("Hello"))
+  console.log(parser.parseString("Hello, world!"))
+  console.log(parser.parseString("Hi, world!"))
+}
