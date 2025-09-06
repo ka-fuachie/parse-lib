@@ -162,6 +162,24 @@ function literal(text) {
   })
 }
 
+// {
+//   const parser = literal("Hello")
+//   console.log(parser.parseString("Hell"))
+//   console.log(parser.parseString("Hello, world!"))
+//   console.log(parser.parseString("Hi, world!"))
+// }
+
+// TODO:
+const anyChar = null
+
+/** @param {string | [string, string]} chars */
+function charFrom(chars) {
+  // TODO:
+}
+
+// TODO:
+const endOfInput = null
+
 /**
   * @template {Parser[]} T
   * @param {T} parsers
@@ -187,6 +205,19 @@ function sequenceOf(...parsers) {
   })
 }
 
+// {
+//   const parser = sequenceOf(
+//     literal("Hello"),
+//     literal(", "),
+//     literal("world"),
+//     literal("!"),
+//   )
+//   console.log(parser.parseString("Hell"))
+//   console.log(parser.parseString("Hello"))
+//   console.log(parser.parseString("Hello, world!"))
+//   console.log(parser.parseString("Hi, world!"))
+// }
+
 /**
   * @template {Parser[]} T
   * @param {T} parsers
@@ -209,32 +240,140 @@ function oneOf(...parsers) {
 }
 
 // {
-//   const parser = literal("Hello")
+//   const parser = oneOf(
+//     literal("Hello"),
+//     literal("Hi"),
+//   )
+//
 //   console.log(parser.parseString("Hell"))
 //   console.log(parser.parseString("Hello, world!"))
 //   console.log(parser.parseString("Hi, world!"))
 // }
+
+/**
+  * @template {Parser} T
+  * @param {T} parser
+  */
+function zeroOrMore(parser) {
+  return new Parser(parserState => {
+    /** @type {ParserType<T>[]} */
+    const result = []
+
+    let currentState = parserState
+    while(true) {
+      const nextState = /** @type {ParserState} */(parser.transform(currentState))
+      if(isErrorState(nextState)) break
+
+      result.push(nextState.result)
+      currentState = nextState
+    }
+
+    return {
+      ...currentState,
+      status: result.length === 0 ? ParserStateStatus.COMPLETE : currentState.status,
+      result,
+    }
+  })
+}
 
 // {
-//   const parser = sequenceOf(
-//     literal("Hello"),
-//     literal(", "),
-//     literal("world"),
-//     literal("!"),
-//   )
-//   console.log(parser.parseString("Hell"))
-//   console.log(parser.parseString("Hello"))
-//   console.log(parser.parseString("Hello, world!"))
-//   console.log(parser.parseString("Hi, world!"))
+//   const parser = zeroOrMore(literal("Ha"))
+//   console.log(parser.parseString("He"))
+//   console.log(parser.parseString("Ha"))
+//   console.log(parser.parseString("HaHaHa!"))
+//   console.log(parser.parseString("HoHoHo!"))
 // }
 
-{
-  const parser = oneOf(
-    literal("Hello"),
-    literal("Hi"),
-  )
+/**
+  * @template {Parser} T
+  * @param {T} parser
+  */
+function oneOrMore(parser) {
+  return new Parser(parserState => {
+    /** @type {ParserType<T>[]} */
+    const result = []
 
-  console.log(parser.parseString("Hell"))
-  console.log(parser.parseString("Hello, world!"))
-  console.log(parser.parseString("Hi, world!"))
+    let currentState = parserState
+    while(true) {
+      const nextState = /** @type {ParserState} */(parser.transform(currentState))
+      if(isErrorState(nextState)) break
+
+      result.push(nextState.result)
+      currentState = nextState
+    }
+
+    if(result.length === 0) {
+      return /**@type {ParserState<ParserType<T>[]>}*/({
+        ...currentState,
+        status: ParserStateStatus.ERROR,
+        error: new Error(`Expected at least one match, but got none`),
+      })
+    }
+
+    return {
+      ...currentState,
+      result,
+    }
+  })
 }
+
+// {
+//   const parser = oneOrMore(literal("Ha"))
+//   console.log(parser.parseString("He"))
+//   console.log(parser.parseString("Ha"))
+//   console.log(parser.parseString("HaHaHa!"))
+//   console.log(parser.parseString("HoHoHo!"))
+// }
+
+/**
+  * @template {Parser} T
+  * @param {T} parser
+  */
+function optional(parser) {
+  return new Parser(parserState => {
+    const nextState = /** @type {ParserState<ParserType<T>>} */(parser.transform(parserState))
+    if(isErrorState(nextState)) {
+      return /**@type {ParserState<null>}*/({
+        ...parserState,
+        status: ParserStateStatus.COMPLETE,
+        result: null,
+      })
+    }
+
+    return nextState
+  })
+}
+
+// {
+//   const parser = optional(literal("Ha"))
+//   console.log(parser.parseString("He"))
+//   console.log(parser.parseString("Ha"))
+//   console.log(parser.parseString("HaHaHa!"))
+// }
+
+// TODO: and predicate
+// TODO: not predicate
+
+/**
+  * @template {Parser} T
+  * @param {() => T} parserThunk
+  */
+function lazy(parserThunk) {
+  return new Parser(parserState => {
+    const parser = parserThunk()
+    return /**@type{ParserState<ParserType<T>>}*/(parser.transform(parserState))
+  })
+}
+
+// {
+//   const parser = lazy(() => (
+//     sequenceOf(
+//       literal("Hello, "),
+//       worldParser
+//     )
+//   ))
+//   const worldParser = literal("world!")
+//
+//   console.log(parser.parseString("Hello, world!"))
+//   console.log(parser.parseString("Hello, everyone!"))
+// }
