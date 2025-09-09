@@ -169,16 +169,100 @@ function literal(text) {
 //   console.log(parser.parseString("Hi, world!"))
 // }
 
-// TODO:
-const anyChar = null
+/** @type {Parser<string>} */
+const anyChar = new Parser(parserState => {
+  if(parserState.index >= parserState.input.value.length) {
+    return {
+      ...parserState,
+      status: ParserStateStatus.ERROR,
+      error: new Error(`Expected any character, but got end of input`),
+    }
+  }
 
-/** @param {string | [string, string]} chars */
-function charFrom(chars) {
-  // TODO:
+  return {
+    ...parserState,
+    status: ParserStateStatus.COMPLETE,
+    index: parserState.index + 1,
+    result: parserState.input.value[parserState.index],
+  }
+})
+
+// {
+//   const parser = anyChar
+//   console.log(parser.parseString(""))
+//   console.log(parser.parseString("H"))
+//   console.log(parser.parseString("Hello"))
+// }
+
+/** @param {(string | [string, string])[]} charSet */
+function charFrom(charSet) {
+  return new Parser(parserState => {
+    if(parserState.index >= parserState.input.value.length) {
+      return {
+        ...parserState,
+        status: ParserStateStatus.ERROR,
+        error: new Error(`Expected character from set, but got end of input`),
+      }
+    }
+
+    for(let i = 0; i < charSet.length; i++) {
+      const charOrRange = charSet[i]
+
+      if(typeof charOrRange === "string" && parserState.input.value[parserState.index] === charOrRange) {
+        return {
+          ...parserState,
+          status: ParserStateStatus.COMPLETE,
+          index: parserState.index + 1,
+          result: charOrRange,
+        }
+      }
+
+      if(Array.isArray(charOrRange)) {
+        // TODO:
+        throw new Error("Not implemented yet")
+      }
+    }
+
+    return {
+      ...parserState,
+      status: ParserStateStatus.ERROR,
+      error: new Error(`Expected character from set, but got "${parserState.input.value[parserState.index]}"`),
+    }
+  })
 }
 
-// TODO:
-const endOfInput = null
+// {
+//   const parser = charFrom(["H", "e", "l", "o"])
+//   console.log(parser.parseString(""))
+//   console.log(parser.parseString("H"))
+//   console.log(parser.parseString("A"))
+//   console.log(parser.parseString("e"))
+//   console.log(parser.parseString("Hello"))
+// }
+
+/** @type {Parser<null>} */
+const endOfInput = new Parser(parserState => {
+  if(parserState.index < parserState.input.value.length) {
+    return {
+      ...parserState,
+      status: ParserStateStatus.ERROR,
+      error: new Error(`Expected end of input, but got "${parserState.input.value.slice(parserState.index)}"`),
+    }
+  }
+
+  return {
+    ...parserState,
+    status: ParserStateStatus.COMPLETE,
+    result: null,
+  }
+})
+
+// {
+//   const parser = endOfInput
+//   console.log(parser.parseString(""))
+//   console.log(parser.parseString("H"))
+//   console.log(parser.parseString("Hello"))
+// }
 
 /**
   * @template {Parser[]} T
@@ -351,8 +435,65 @@ function optional(parser) {
 //   console.log(parser.parseString("HaHaHa!"))
 // }
 
-// TODO: and predicate
-// TODO: not predicate
+/**
+  * @template {Parser} T
+  * @param {T} parser
+  */
+function followedBy(parser) {
+  return new Parser(parserState => {
+    const nextState = /** @type {ParserState<ParserType<T>>} */(parser.transform(parserState))
+    if(isErrorState(nextState)) {
+      return /**@type {ParserState<ParserType<T>>}*/({
+        ...parserState,
+        status: ParserStateStatus.ERROR,
+        error: nextState.error,
+      })
+    }
+
+    return {
+      ...parserState,
+      status: ParserStateStatus.COMPLETE,
+      result: nextState.result,
+    }
+  })
+}
+
+{
+  const parser = followedBy(literal("world"))
+  console.log(parser.parseString("Hello, "))
+  console.log(parser.parseString("world!"))
+  console.log(parser.parseString("Hello, world!"))
+}
+
+/**
+  * @template {Parser} T
+  * @param {T} parser
+  */
+function notFollowedBy(parser) {
+  return new Parser(parserState => {
+    const nextState = /** @type {ParserState} */(parser.transform(parserState))
+    if(!isErrorState(nextState)) {
+      return /**@type {ParserState<null>}*/({
+        ...parserState,
+        status: ParserStateStatus.ERROR,
+        error: new Error(`Expected to not be followed by given parser, but it did match`),
+      })
+    }
+
+    return {
+      ...parserState,
+      status: ParserStateStatus.COMPLETE,
+      result: null,
+    }
+  })
+}
+
+{
+  const parser = notFollowedBy(literal("world"))
+  console.log(parser.parseString("Hello, "))
+  console.log(parser.parseString("world!"))
+  console.log(parser.parseString("Hello, world!"))
+}
 
 /**
   * @template {Parser} T
