@@ -1,6 +1,7 @@
 // TODO: handle partial input
 // TODO: handle error cases properly, proper error messages and structures
 // TODO: validate parser params properly, eg. sequenceOf should have at least one parser
+// TODO: properly handle reccursice parsers(Fix left recursion)
 
 const ParserStateStatus = /**@type{const}*/({
   COMPLETE: "complete",
@@ -213,13 +214,22 @@ function charFrom(charSet) {
           ...parserState,
           status: ParserStateStatus.COMPLETE,
           index: parserState.index + 1,
-          result: charOrRange,
+          result: parserState.input.value[parserState.index],
         }
       }
 
       if(Array.isArray(charOrRange)) {
-        // TODO:
-        throw new Error("Not implemented yet")
+        const [start, end] = charOrRange.map(c => c.charCodeAt(0)).sort((a, b) => a - b)
+        const charCode = parserState.input.value[parserState.index].charCodeAt(0)
+
+        if(charCode >= start && charCode <= end) {
+          return {
+            ...parserState,
+            status: ParserStateStatus.COMPLETE,
+            index: parserState.index + 1,
+            result: parserState.input.value[parserState.index],
+          }
+        }
       }
     }
 
@@ -231,14 +241,21 @@ function charFrom(charSet) {
   })
 }
 
-// {
-//   const parser = charFrom(["H", "e", "l", "o"])
-//   console.log(parser.parseString(""))
-//   console.log(parser.parseString("H"))
-//   console.log(parser.parseString("A"))
-//   console.log(parser.parseString("e"))
-//   console.log(parser.parseString("Hello"))
-// }
+{
+  // const parser1 = charFrom(["H", "e", "l", "o"])
+  // console.log(parser1.parseString(""))
+  // console.log(parser1.parseString("H"))
+  // console.log(parser1.parseString("A"))
+  // console.log(parser1.parseString("e"))
+  // console.log(parser1.parseString("Hello"))
+
+  const parser2 = charFrom([["a", "z"], ["A", "Z"]])
+  console.log(parser2.parseString(""))
+  console.log(parser2.parseString("H"))
+  console.log(parser2.parseString("a"))
+  console.log(parser2.parseString("1"))
+  console.log(parser2.parseString("Hello"))
+}
 
 /** @type {Parser<null>} */
 const endOfInput = new Parser(parserState => {
@@ -458,12 +475,12 @@ function followedBy(parser) {
   })
 }
 
-{
-  const parser = followedBy(literal("world"))
-  console.log(parser.parseString("Hello, "))
-  console.log(parser.parseString("world!"))
-  console.log(parser.parseString("Hello, world!"))
-}
+// {
+//   const parser = followedBy(literal("world"))
+//   console.log(parser.parseString("Hello, "))
+//   console.log(parser.parseString("world!"))
+//   console.log(parser.parseString("Hello, world!"))
+// }
 
 /**
   * @template {Parser} T
@@ -488,12 +505,12 @@ function notFollowedBy(parser) {
   })
 }
 
-{
-  const parser = notFollowedBy(literal("world"))
-  console.log(parser.parseString("Hello, "))
-  console.log(parser.parseString("world!"))
-  console.log(parser.parseString("Hello, world!"))
-}
+// {
+//   const parser = notFollowedBy(literal("world"))
+//   console.log(parser.parseString("Hello, "))
+//   console.log(parser.parseString("world!"))
+//   console.log(parser.parseString("Hello, world!"))
+// }
 
 /**
   * @template {Parser} T
