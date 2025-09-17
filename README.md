@@ -5,3 +5,4 @@
 - <https://github.com/francisrstokes/arcsecond>
 - <https://www.youtube.com/playlist?list=PLP29wDx6QmW5yfO1LAgO8kU3aQEj8SIrU>
 - <https://en.wikipedia.org/wiki/Parsing_expression_grammar>
+- <https://web.cs.ucla.edu/~todd/research/pepm08.pdf>

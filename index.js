@@ -1,4 +1,3 @@
-// TODO: handle partial input
 // TODO: handle error cases properly, proper error messages and structures
 // TODO: validate parser params properly, eg. sequenceOf should have at least one parser
 // TODO: properly handle reccursice parsers(Fix left recursion)
@@ -21,7 +20,7 @@ const ParserStateStatus = /**@type{const}*/({
   * @property {Exclude<ParserStateStatusType, "error">} status
   * @property {T} result
   * @property {null} error
-  * @property {Map<Parser, Map<number, ParserResult>>} cacheMap
+  * @property {Map<Parser, Map<number, ParserState>>} cacheMap
   */
 
 /**
@@ -33,7 +32,7 @@ const ParserStateStatus = /**@type{const}*/({
   * @property {Extract<ParserStateStatusType, "error">} status
   * @property {null} result
   * @property {Error} error
-  * @property {Map<Parser, Map<number, ParserResult>>} cacheMap
+  * @property {Map<Parser, Map<number, ParserState>>} cacheMap
   */
 
 /**
@@ -61,6 +60,10 @@ function isErrorState(state) {
   return state.status === ParserStateStatus.ERROR
 }
 
+class ParserUnexpectedEndOfInputError extends Error {
+  name = "ParserEndOfInputError"
+}
+
 /** @template T */
 class Parser {
   /** @type {StateTransformFn<T>} */
@@ -82,23 +85,23 @@ class Parser {
       cache = new Map()
       parserState.cacheMap.set(this, cache)
     }
-    /** @type {ParserResult<T> | undefined} */
-    const cachedResult = cache.get(parserState.index)
-    if(cachedResult != null) {
+    /** @type {ParserState<T> | undefined} */
+    let cachedParserState = cache.get(parserState.index)
+    if(cachedParserState != null && (
+      (cachedParserState.status === ParserStateStatus.COMPLETE) ||
+      (cachedParserState.status === ParserStateStatus.PARTIAL && cachedParserState.input.value === parserState.input.value && cachedParserState.input.done === parserState.input.done) || 
+      (cachedParserState.status === ParserStateStatus.ERROR && !(cachedParserState.error instanceof ParserUnexpectedEndOfInputError && !cachedParserState.input.done))
+    )) {
       return {
-        ...parserState,
-        ...cachedResult,
+        ...cachedParserState,
+        input: parserState.input,
+        cacheMap: parserState.cacheMap,
       }
     }
 
-    const nextState = this.#stateTransformFn(parserState)
-    cache.set(parserState.index, {
-      index: nextState.index,
-      status: nextState.status,
-      error: nextState.error,
-      result: nextState.result,
-    })
-    return nextState
+    const nextParserState = this.#stateTransformFn(parserState)
+    cache.set(parserState.index, nextParserState)
+    return nextParserState
   }
 
   /** @param {string} input */
@@ -114,13 +117,61 @@ class Parser {
     }
 
     const nextParserState = this.transform(parserState)
+    return nextParserState
+  }
 
-    return /**@satisfies {ParserResult} */({
-      status: nextParserState.status,
-      index: nextParserState.index,
-      error: nextParserState.error,
-      result: nextParserState.result,
-    })
+  /** @param {Iterable<string>} input */
+  *parseIterable(input) {
+    /** @satisfies {ParserState} */
+    const parserState = {
+      input: { value: "", done: false },
+      index: 0,
+      status: ParserStateStatus.PARTIAL,
+      result: null,
+      error: null,
+      cacheMap: new Map(),
+    }
+
+    /** @type {ParserState<T>} */
+    let currentParserState = parserState
+    let currentInputValue = ""
+
+    for(let chunk of input) {
+      currentInputValue += chunk
+      const nextParserState = /**@type{ParserState<T>}*/(this.transform({
+        ...currentParserState,
+        input: {
+          value: currentInputValue,
+          done: false,
+        },
+        index: 0,
+      }))
+
+      // @ts-ignore
+      if(nextParserState.status === ParserStateStatus.ERROR && nextParserState.error instanceof ParserUnexpectedEndOfInputError) continue
+      if(currentParserState.input.value === nextParserState.input.value && currentParserState.index === nextParserState.index && currentParserState.status === nextParserState.status) continue
+
+      currentParserState = nextParserState
+      yield currentParserState
+
+      if(currentParserState.status !== ParserStateStatus.PARTIAL) return currentParserState
+    }
+
+    currentParserState = /**@type{ParserState<T>}*/(this.transform({
+      ...currentParserState,
+      input: {
+        value: currentInputValue,
+        done: true,
+      },
+      index: 0,
+    }))
+
+    yield currentParserState
+    return currentParserState
+  }
+
+  /** @param {AsyncIterable<string>} input */
+  async *parseAsyncIterable(input) {
   }
 }
 
@@ -135,16 +186,24 @@ class Parser {
   */
 function literal(text) {
   return new Parser(parserState => {
-    // TODO: handle partial cases
-    // const remainingInput = parserState.input.value.slice(parserState.index)
-    // if(!parserState.input.done && remainingInput.length < text.length && text.startsWith(remainingInput)) {
-    //   return {
-    //     ...parserState,
-    //     index: parserState.index + remainingInput.length,
-    //     status: ParserStateStatus.PARTIAL,
-    //     result: remainingInput,
-    //   }
-    // }
+    const remainingInput = parserState.input.value.slice(parserState.index)
+
+    if(remainingInput.length === 0) {
+      return {
+        ...parserState,
+        status: ParserStateStatus.ERROR,
+        error: new ParserUnexpectedEndOfInputError(`Expected "${text}", but got unexpected end of input`)
+      }
+    }
+
+    if(!parserState.input.done && remainingInput.length < text.length && text.startsWith(remainingInput)) {
+      return {
+        ...parserState,
+        index: parserState.index + remainingInput.length,
+        status: ParserStateStatus.PARTIAL,
+        result: remainingInput,
+      }
+    }
 
     if(!parserState.input.value.startsWith(text, parserState.index)) {
       return {
@@ -169,6 +228,12 @@ function literal(text) {
 //   console.log(parser.parseString("Hello, world!"))
 //   console.log(parser.parseString("Hi, world!"))
 // }
+// {
+//   const parser = literal("Hello")
+//   for(let result of parser.parseIterable(["", "", "H", "e",  "l", "l", "o"])) {
+//     console.log(result)
+//   }
+// }
 
 /** @type {Parser<string>} */
 const anyChar = new Parser(parserState => {
@@ -176,7 +241,7 @@ const anyChar = new Parser(parserState => {
     return {
       ...parserState,
       status: ParserStateStatus.ERROR,
-      error: new Error(`Expected any character, but got end of input`),
+      error: new ParserUnexpectedEndOfInputError(`Expected any character, but got unexpected end of input`),
     }
   }
 
@@ -194,6 +259,12 @@ const anyChar = new Parser(parserState => {
 //   console.log(parser.parseString("H"))
 //   console.log(parser.parseString("Hello"))
 // }
+// {
+//   const parser = anyChar
+//   for(let result of parser.parseIterable(["", "", "H", "e",  "l", "l", "o"])) {
+//     console.log(result)
+//   }
+// }
 
 /** @param {(string | [string, string])[]} charSet */
 function charFrom(charSet) {
@@ -202,7 +273,7 @@ function charFrom(charSet) {
       return {
         ...parserState,
         status: ParserStateStatus.ERROR,
-        error: new Error(`Expected character from set, but got end of input`),
+        error: new ParserUnexpectedEndOfInputError(`Expected character from set, but got unexpected end of input`),
       }
     }
 
@@ -241,21 +312,21 @@ function charFrom(charSet) {
   })
 }
 
-{
-  // const parser1 = charFrom(["H", "e", "l", "o"])
-  // console.log(parser1.parseString(""))
-  // console.log(parser1.parseString("H"))
-  // console.log(parser1.parseString("A"))
-  // console.log(parser1.parseString("e"))
-  // console.log(parser1.parseString("Hello"))
-
-  const parser2 = charFrom([["a", "z"], ["A", "Z"]])
-  console.log(parser2.parseString(""))
-  console.log(parser2.parseString("H"))
-  console.log(parser2.parseString("a"))
-  console.log(parser2.parseString("1"))
-  console.log(parser2.parseString("Hello"))
-}
+// {
+//   const parser1 = charFrom(["H", "e", "l", "o"])
+//   console.log(parser1.parseString(""))
+//   console.log(parser1.parseString("H"))
+//   console.log(parser1.parseString("A"))
+//   console.log(parser1.parseString("e"))
+//   console.log(parser1.parseString("Hello"))
+//
+//   const parser2 = charFrom([["a", "z"], ["A", "Z"]])
+//   console.log(parser2.parseString(""))
+//   console.log(parser2.parseString("H"))
+//   console.log(parser2.parseString("a"))
+//   console.log(parser2.parseString("1"))
+//   console.log(parser2.parseString("Hello"))
+// }
 
 /** @type {Parser<null>} */
 const endOfInput = new Parser(parserState => {
@@ -264,6 +335,14 @@ const endOfInput = new Parser(parserState => {
       ...parserState,
       status: ParserStateStatus.ERROR,
       error: new Error(`Expected end of input, but got "${parserState.input.value.slice(parserState.index)}"`),
+    }
+  }
+
+  if(!parserState.input.done) {
+    return {
+      ...parserState,
+      status: ParserStateStatus.ERROR,
+      error: new ParserUnexpectedEndOfInputError(`Expected end of input, but got unexpected end of input`),
     }
   }
 
@@ -280,6 +359,16 @@ const endOfInput = new Parser(parserState => {
 //   console.log(parser.parseString("H"))
 //   console.log(parser.parseString("Hello"))
 // }
+// {
+//   const parser = endOfInput
+//   for(let result of parser.parseIterable(["", "", "H", "e",  "l", "l", "o"])) {
+//     console.log(result)
+//   }
+//   console.log("---")
+//   for(let result of parser.parseIterable(["", "", ""])) {
+//     console.log(result)
+//   }
+// }
 
 /**
   * @template {Parser[]} T
@@ -290,17 +379,24 @@ function sequenceOf(...parsers) {
     let result = /** @type {{[K in keyof T]: ParserType<T[K]>}} */(new Array(parsers.length))
     
     /** @type {ParserState} */
-    let currentState = parserState
+    let currentParserState = parserState
     for(let i = 0; i < parsers.length; i++) {
-      currentState = /** @type {ParserState} */(parsers[i].transform(currentState))
-      if(isErrorState(currentState)) {
-        return currentState
+      const nextParserState = /** @type {ParserState} */(parsers[i].transform(currentParserState))
+      if(isErrorState(nextParserState) && nextParserState.error instanceof ParserUnexpectedEndOfInputError && !nextParserState.input.done) {
+        return {
+          ...currentParserState,
+          status: ParserStateStatus.PARTIAL,
+          result,
+        }
       }
-      result[i] = currentState.result
+      if(isErrorState(nextParserState)) return nextParserState
+
+      result[i] = nextParserState.result
+      currentParserState = nextParserState
     }
 
     return {
-      ...currentState,
+      ...currentParserState,
       result,
     }
   })
@@ -318,6 +414,23 @@ function sequenceOf(...parsers) {
 //   console.log(parser.parseString("Hello, world!"))
 //   console.log(parser.parseString("Hi, world!"))
 // }
+// {
+//   const parser = sequenceOf(
+//     literal("Hello"),
+//     literal(", "),
+//     literal("world"),
+//   )
+//   function* getInput() {
+//     yield ""
+//     yield ""
+//     yield* "Hello"
+//     yield ""
+//     yield* ", world"
+//   }
+//   for(let result of parser.parseIterable(getInput())) {
+//     console.log(result)
+//   }
+// }
 
 /**
   * @template {Parser[]} T
@@ -327,13 +440,16 @@ function oneOf(...parsers) {
   return new Parser(parserState => {
     let firstErrorState = null
     for(let i = 0; i < parsers.length; i++) {
-      const nextState = /** @type {ParserState<ParserType<T[number]>>} */(parsers[i].transform(parserState))
-      if(isErrorState(nextState)) {
-        firstErrorState ??= nextState
+      const nextParserState = /** @type {ParserState<ParserType<T[number]>>} */(parsers[i].transform(parserState))
+      if(isErrorState(nextParserState) && nextParserState.error instanceof ParserUnexpectedEndOfInputError && !nextParserState.input.done) {
+        return nextParserState
+      }
+      if(isErrorState(nextParserState)) {
+        firstErrorState ??= nextParserState
         continue
       }
 
-      return nextState
+      return nextParserState
     }
 
     return firstErrorState
@@ -350,6 +466,24 @@ function oneOf(...parsers) {
 //   console.log(parser.parseString("Hello, world!"))
 //   console.log(parser.parseString("Hi, world!"))
 // }
+// {
+//   const parser = oneOf(
+//     literal("Hello"),
+//     literal("Hi"),
+//   )
+//
+//   function* getInput() {
+//     yield ""
+//     yield ""
+//     yield* "H"
+//     yield ""
+//     yield* "i"
+//   }
+//
+//   for(let result of parser.parseIterable(getInput())) {
+//     console.log(result)
+//   }
+// }
 
 /**
   * @template {Parser} T
@@ -360,18 +494,25 @@ function zeroOrMore(parser) {
     /** @type {ParserType<T>[]} */
     const result = []
 
-    let currentState = parserState
+    let currentParserState = parserState
     while(true) {
-      const nextState = /** @type {ParserState} */(parser.transform(currentState))
-      if(isErrorState(nextState)) break
+      const nextParserState = /** @type {ParserState} */(parser.transform(currentParserState))
+      if(isErrorState(nextParserState) && nextParserState.error instanceof ParserUnexpectedEndOfInputError && !nextParserState.input.done) {
+        return {
+          ...currentParserState,
+          status: ParserStateStatus.PARTIAL,
+          result,
+        }
+      }
+      if(isErrorState(nextParserState)) break
 
-      result.push(nextState.result)
-      currentState = nextState
+      result.push(nextParserState.result)
+      currentParserState = nextParserState
     }
 
     return {
-      ...currentState,
-      status: result.length === 0 ? ParserStateStatus.COMPLETE : currentState.status,
+      ...currentParserState,
+      status: result.length === 0 ? ParserStateStatus.COMPLETE : currentParserState.status,
       result,
     }
   })
@@ -384,6 +525,19 @@ function zeroOrMore(parser) {
 //   console.log(parser.parseString("HaHaHa!"))
 //   console.log(parser.parseString("HoHoHo!"))
 // }
+// {
+//   const parser = zeroOrMore(literal("Ha"))
+//   function* getInput() {
+//     yield ""
+//     yield ""
+//     yield* "H"
+//     yield ""
+//     yield* "aHaHa"
+//   }
+//   for(let result of parser.parseIterable(getInput())) {
+//     console.log(result)
+//   }
+// }
 
 /**
   * @template {Parser} T
@@ -394,25 +548,32 @@ function oneOrMore(parser) {
     /** @type {ParserType<T>[]} */
     const result = []
 
-    let currentState = parserState
+    let currentParserState = parserState
     while(true) {
-      const nextState = /** @type {ParserState} */(parser.transform(currentState))
-      if(isErrorState(nextState)) break
+      const nextParserState = /** @type {ParserState} */(parser.transform(currentParserState))
+      if(isErrorState(nextParserState) && nextParserState.error instanceof ParserUnexpectedEndOfInputError && !nextParserState.input.done) {
+        return {
+          ...currentParserState,
+          status: ParserStateStatus.PARTIAL,
+          result,
+        }
+      }
+      if(isErrorState(nextParserState)) break
 
-      result.push(nextState.result)
-      currentState = nextState
+      result.push(nextParserState.result)
+      currentParserState = nextParserState
     }
 
     if(result.length === 0) {
       return /**@type {ParserState<ParserType<T>[]>}*/({
-        ...currentState,
+        ...currentParserState,
         status: ParserStateStatus.ERROR,
         error: new Error(`Expected at least one match, but got none`),
       })
     }
 
     return {
-      ...currentState,
+      ...currentParserState,
       result,
     }
   })
@@ -425,6 +586,24 @@ function oneOrMore(parser) {
 //   console.log(parser.parseString("HaHaHa!"))
 //   console.log(parser.parseString("HoHoHo!"))
 // }
+// {
+//   const parser = zeroOrMore(literal("Ha"))
+//   function* getInput() {
+//     yield ""
+//     yield ""
+//     yield* "H"
+//     yield ""
+//     yield* "aHaHa"
+//   }
+//   for(let result of parser.parseIterable(getInput())) {
+//     console.log(result)
+//   }
+//   console.log("---")
+//   const parser2 = oneOrMore(literal("Ho"))
+//   for(let result of parser2.parseIterable(getInput())) {
+//     console.log(result)
+//   }
+// }
 
 /**
   * @template {Parser} T
@@ -432,8 +611,11 @@ function oneOrMore(parser) {
   */
 function optional(parser) {
   return new Parser(parserState => {
-    const nextState = /** @type {ParserState<ParserType<T>>} */(parser.transform(parserState))
-    if(isErrorState(nextState)) {
+    const nextParserState = /** @type {ParserState<ParserType<T>>} */(parser.transform(parserState))
+    if(isErrorState(nextParserState) && nextParserState.error instanceof ParserUnexpectedEndOfInputError && !nextParserState.input.done) {
+      return nextParserState
+    }
+    if(isErrorState(nextParserState)) {
       return /**@type {ParserState<null>}*/({
         ...parserState,
         status: ParserStateStatus.COMPLETE,
@@ -441,7 +623,7 @@ function optional(parser) {
       })
     }
 
-    return nextState
+    return nextParserState
   })
 }
 
@@ -450,6 +632,24 @@ function optional(parser) {
 //   console.log(parser.parseString("He"))
 //   console.log(parser.parseString("Ha"))
 //   console.log(parser.parseString("HaHaHa!"))
+// }
+// {
+//   const parser = optional(literal("Ha"))
+//   function* getInput1() {
+//     yield ""
+//     yield* "Ha"
+//   }
+//   function* getInput2() {
+//     yield ""
+//     yield* "He"
+//   }
+//   for(let result of parser.parseIterable(getInput1())) {
+//     console.log(result)
+//   }
+//   console.log("---")
+//   for(let result of parser.parseIterable(getInput2())) {
+//     console.log(result)
+//   }
 // }
 
 /**
@@ -469,7 +669,7 @@ function followedBy(parser) {
 
     return {
       ...parserState,
-      status: ParserStateStatus.COMPLETE,
+      status: nextState.status,
       result: nextState.result,
     }
   })
@@ -481,6 +681,24 @@ function followedBy(parser) {
 //   console.log(parser.parseString("world!"))
 //   console.log(parser.parseString("Hello, world!"))
 // }
+// {
+//   const parser = followedBy(literal("world"))
+//   function* getInput1() {
+//     yield ""
+//     yield* "world"
+//   }
+//   function* getInput2() {
+//     yield ""
+//     yield* "wor"
+//   }
+//   for(let result of parser.parseIterable(getInput1())) {
+//     console.log(result)
+//   }
+//   console.log("---")
+//   for(let result of parser.parseIterable(getInput2())) {
+//     console.log(result)
+//   }
+// }
 
 /**
   * @template {Parser} T
@@ -488,12 +706,28 @@ function followedBy(parser) {
   */
 function notFollowedBy(parser) {
   return new Parser(parserState => {
-    const nextState = /** @type {ParserState} */(parser.transform(parserState))
-    if(!isErrorState(nextState)) {
+    const nextParserState = /** @type {ParserState} */(parser.transform(parserState))
+    if(nextParserState.status === ParserStateStatus.COMPLETE) {
       return /**@type {ParserState<null>}*/({
         ...parserState,
         status: ParserStateStatus.ERROR,
         error: new Error(`Expected to not be followed by given parser, but it did match`),
+      })
+    }
+
+    if(isErrorState(nextParserState) && nextParserState.error instanceof ParserUnexpectedEndOfInputError && !nextParserState.input.done) {
+      return /**@type {ParserState<null>}*/({
+        ...parserState,
+        status: ParserStateStatus.ERROR,
+        error: new ParserUnexpectedEndOfInputError(`Expected to not be followed by given parser, but got unexpected end of input`),
+      })
+    }
+
+    if(nextParserState.status === ParserStateStatus.PARTIAL) {
+      return /**@type {ParserState<null>}*/({
+        ...parserState,
+        status: ParserStateStatus.ERROR,
+        error: new ParserUnexpectedEndOfInputError(`Expected to not be followed by given parser, but got partial match`),
       })
     }
 
@@ -510,6 +744,24 @@ function notFollowedBy(parser) {
 //   console.log(parser.parseString("Hello, "))
 //   console.log(parser.parseString("world!"))
 //   console.log(parser.parseString("Hello, world!"))
+// }
+// {
+//   const parser = notFollowedBy(literal("world"))
+//   function* getInput1() {
+//     yield ""
+//     yield* "wor"
+//   }
+//   function* getInput2() {
+//     yield ""
+//     yield* "world"
+//   }
+//   for(let result of parser.parseIterable(getInput1())) {
+//     console.log(result)
+//   }
+//   console.log("---")
+//   for(let result of parser.parseIterable(getInput2())) {
+//     console.log(result)
+//   }
 // }
 
 /**
