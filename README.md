@@ -1,4 +1,4 @@
-## Usefule links
+## Useful links
 
 - <https://blog.bruce-hill.com/packrat-parsing-from-scratch>
 - <https://medium.com/@gvanrossum_83706/peg-parsing-series-de5d41b2ed60>

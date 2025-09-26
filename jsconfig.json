@@ -1,6 +1,8 @@
 {
+  "$schema": "https://www.schemastore.org/jsconfig.json",
   "compilerOptions": {
-    target: "ESNext",
-    checkJs: true
+    "target": "ESNext",
+    "checkJs": true,
+    "moduleResolution": "nodenext"
   }
 }
