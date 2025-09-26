@@ -222,19 +222,6 @@ function literal(text) {
   })
 }
 
-// {
-//   const parser = literal("Hello")
-//   console.log(parser.parseString("Hell"))
-//   console.log(parser.parseString("Hello, world!"))
-//   console.log(parser.parseString("Hi, world!"))
-// }
-// {
-//   const parser = literal("Hello")
-//   for(let result of parser.parseIterable(["", "", "H", "e",  "l", "l", "o"])) {
-//     console.log(result)
-//   }
-// }
-
 /** @type {Parser<string>} */
 const anyChar = new Parser(parserState => {
   if(parserState.index >= parserState.input.value.length) {
@@ -787,3 +774,22 @@ function lazy(parserThunk) {
 //   console.log(parser.parseString("Hello, world!"))
 //   console.log(parser.parseString("Hello, everyone!"))
 // }
+
+export {
+  Parser,
+  ParserStateStatus,
+  ParserUnexpectedEndOfInputError,
+
+  literal,
+  anyChar,
+  charFrom,
+  endOfInput,
+  sequenceOf,
+  oneOf,
+  zeroOrMore,
+  oneOrMore,
+  optional,
+  followedBy,
+  notFollowedBy,
+  lazy,
+}
