@@ -1,6 +1,6 @@
 // TODO: handle error cases properly, proper error messages and structures
 // TODO: validate parser params properly, eg. sequenceOf should have at least one parser
-// TODO: properly handle reccursice parsers(Fix left recursion)
+// TODO: properly handle recursive parsers(Fix left recursion)
 
 const ParserStateStatus = /**@type{const}*/({
   COMPLETE: "complete",
@@ -240,19 +240,6 @@ const anyChar = new Parser(parserState => {
   }
 })
 
-// {
-//   const parser = anyChar
-//   console.log(parser.parseString(""))
-//   console.log(parser.parseString("H"))
-//   console.log(parser.parseString("Hello"))
-// }
-// {
-//   const parser = anyChar
-//   for(let result of parser.parseIterable(["", "", "H", "e",  "l", "l", "o"])) {
-//     console.log(result)
-//   }
-// }
-
 /** @param {(string | [string, string])[]} charSet */
 function charFrom(charSet) {
   return new Parser(parserState => {
@@ -299,22 +286,6 @@ function charFrom(charSet) {
   })
 }
 
-// {
-//   const parser1 = charFrom(["H", "e", "l", "o"])
-//   console.log(parser1.parseString(""))
-//   console.log(parser1.parseString("H"))
-//   console.log(parser1.parseString("A"))
-//   console.log(parser1.parseString("e"))
-//   console.log(parser1.parseString("Hello"))
-//
-//   const parser2 = charFrom([["a", "z"], ["A", "Z"]])
-//   console.log(parser2.parseString(""))
-//   console.log(parser2.parseString("H"))
-//   console.log(parser2.parseString("a"))
-//   console.log(parser2.parseString("1"))
-//   console.log(parser2.parseString("Hello"))
-// }
-
 /** @type {Parser<null>} */
 const endOfInput = new Parser(parserState => {
   if(parserState.index < parserState.input.value.length) {
@@ -339,23 +310,6 @@ const endOfInput = new Parser(parserState => {
     result: null,
   }
 })
-
-// {
-//   const parser = endOfInput
-//   console.log(parser.parseString(""))
-//   console.log(parser.parseString("H"))
-//   console.log(parser.parseString("Hello"))
-// }
-// {
-//   const parser = endOfInput
-//   for(let result of parser.parseIterable(["", "", "H", "e",  "l", "l", "o"])) {
-//     console.log(result)
-//   }
-//   console.log("---")
-//   for(let result of parser.parseIterable(["", "", ""])) {
-//     console.log(result)
-//   }
-// }
 
 /**
   * @template {Parser[]} T
@@ -388,36 +342,6 @@ function sequenceOf(...parsers) {
     }
   })
 }
-
-// {
-//   const parser = sequenceOf(
-//     literal("Hello"),
-//     literal(", "),
-//     literal("world"),
-//     literal("!"),
-//   )
-//   console.log(parser.parseString("Hell"))
-//   console.log(parser.parseString("Hello"))
-//   console.log(parser.parseString("Hello, world!"))
-//   console.log(parser.parseString("Hi, world!"))
-// }
-// {
-//   const parser = sequenceOf(
-//     literal("Hello"),
-//     literal(", "),
-//     literal("world"),
-//   )
-//   function* getInput() {
-//     yield ""
-//     yield ""
-//     yield* "Hello"
-//     yield ""
-//     yield* ", world"
-//   }
-//   for(let result of parser.parseIterable(getInput())) {
-//     console.log(result)
-//   }
-// }
 
 /**
   * @template {Parser[]} T
