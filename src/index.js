@@ -241,7 +241,7 @@ const anyChar = new Parser(parserState => {
 })
 
 /** @param {(string | [string, string])[]} charSet */
-function charFrom(charSet) {
+function charFrom(...charSet) {
   return new Parser(parserState => {
     if(parserState.index >= parserState.input.value.length) {
       return {
@@ -367,35 +367,6 @@ function oneOf(...parsers) {
   })
 }
 
-// {
-//   const parser = oneOf(
-//     literal("Hello"),
-//     literal("Hi"),
-//   )
-//
-//   console.log(parser.parseString("Hell"))
-//   console.log(parser.parseString("Hello, world!"))
-//   console.log(parser.parseString("Hi, world!"))
-// }
-// {
-//   const parser = oneOf(
-//     literal("Hello"),
-//     literal("Hi"),
-//   )
-//
-//   function* getInput() {
-//     yield ""
-//     yield ""
-//     yield* "H"
-//     yield ""
-//     yield* "i"
-//   }
-//
-//   for(let result of parser.parseIterable(getInput())) {
-//     console.log(result)
-//   }
-// }
-
 /**
   * @template {Parser} T
   * @param {T} parser
@@ -428,27 +399,6 @@ function zeroOrMore(parser) {
     }
   })
 }
-
-// {
-//   const parser = zeroOrMore(literal("Ha"))
-//   console.log(parser.parseString("He"))
-//   console.log(parser.parseString("Ha"))
-//   console.log(parser.parseString("HaHaHa!"))
-//   console.log(parser.parseString("HoHoHo!"))
-// }
-// {
-//   const parser = zeroOrMore(literal("Ha"))
-//   function* getInput() {
-//     yield ""
-//     yield ""
-//     yield* "H"
-//     yield ""
-//     yield* "aHaHa"
-//   }
-//   for(let result of parser.parseIterable(getInput())) {
-//     console.log(result)
-//   }
-// }
 
 /**
   * @template {Parser} T
@@ -490,32 +440,6 @@ function oneOrMore(parser) {
   })
 }
 
-// {
-//   const parser = oneOrMore(literal("Ha"))
-//   console.log(parser.parseString("He"))
-//   console.log(parser.parseString("Ha"))
-//   console.log(parser.parseString("HaHaHa!"))
-//   console.log(parser.parseString("HoHoHo!"))
-// }
-// {
-//   const parser = zeroOrMore(literal("Ha"))
-//   function* getInput() {
-//     yield ""
-//     yield ""
-//     yield* "H"
-//     yield ""
-//     yield* "aHaHa"
-//   }
-//   for(let result of parser.parseIterable(getInput())) {
-//     console.log(result)
-//   }
-//   console.log("---")
-//   const parser2 = oneOrMore(literal("Ho"))
-//   for(let result of parser2.parseIterable(getInput())) {
-//     console.log(result)
-//   }
-// }
-
 /**
   * @template {Parser} T
   * @param {T} parser
@@ -537,31 +461,6 @@ function optional(parser) {
     return nextParserState
   })
 }
-
-// {
-//   const parser = optional(literal("Ha"))
-//   console.log(parser.parseString("He"))
-//   console.log(parser.parseString("Ha"))
-//   console.log(parser.parseString("HaHaHa!"))
-// }
-// {
-//   const parser = optional(literal("Ha"))
-//   function* getInput1() {
-//     yield ""
-//     yield* "Ha"
-//   }
-//   function* getInput2() {
-//     yield ""
-//     yield* "He"
-//   }
-//   for(let result of parser.parseIterable(getInput1())) {
-//     console.log(result)
-//   }
-//   console.log("---")
-//   for(let result of parser.parseIterable(getInput2())) {
-//     console.log(result)
-//   }
-// }
 
 /**
   * @template {Parser} T
@@ -585,31 +484,6 @@ function followedBy(parser) {
     }
   })
 }
-
-// {
-//   const parser = followedBy(literal("world"))
-//   console.log(parser.parseString("Hello, "))
-//   console.log(parser.parseString("world!"))
-//   console.log(parser.parseString("Hello, world!"))
-// }
-// {
-//   const parser = followedBy(literal("world"))
-//   function* getInput1() {
-//     yield ""
-//     yield* "world"
-//   }
-//   function* getInput2() {
-//     yield ""
-//     yield* "wor"
-//   }
-//   for(let result of parser.parseIterable(getInput1())) {
-//     console.log(result)
-//   }
-//   console.log("---")
-//   for(let result of parser.parseIterable(getInput2())) {
-//     console.log(result)
-//   }
-// }
 
 /**
   * @template {Parser} T
@@ -650,54 +524,17 @@ function notFollowedBy(parser) {
   })
 }
 
-// {
-//   const parser = notFollowedBy(literal("world"))
-//   console.log(parser.parseString("Hello, "))
-//   console.log(parser.parseString("world!"))
-//   console.log(parser.parseString("Hello, world!"))
-// }
-// {
-//   const parser = notFollowedBy(literal("world"))
-//   function* getInput1() {
-//     yield ""
-//     yield* "wor"
-//   }
-//   function* getInput2() {
-//     yield ""
-//     yield* "world"
-//   }
-//   for(let result of parser.parseIterable(getInput1())) {
-//     console.log(result)
-//   }
-//   console.log("---")
-//   for(let result of parser.parseIterable(getInput2())) {
-//     console.log(result)
-//   }
-// }
-
 /**
   * @template {Parser} T
   * @param {() => T} parserThunk
   */
 function lazy(parserThunk) {
+  let cachedParser = null
   return new Parser(parserState => {
-    const parser = parserThunk()
+    const parser = cachedParser ??= parserThunk()
     return /**@type{ParserState<ParserType<T>>}*/(parser.transform(parserState))
   })
 }
-
-// {
-//   const parser = lazy(() => (
-//     sequenceOf(
-//       literal("Hello, "),
-//       worldParser
-//     )
-//   ))
-//   const worldParser = literal("world!")
-//
-//   console.log(parser.parseString("Hello, world!"))
-//   console.log(parser.parseString("Hello, everyone!"))
-// }
 
 export {
   Parser,
