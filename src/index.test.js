@@ -40,6 +40,113 @@ function createTestSequence(entries) {
 }
 
 describe("Parser", () => {
+  const helloParser = new Parser((parserState) => {
+    const remainingInput = parserState.input.value.slice(parserState.index)
+    const text = "Hello"
+
+    if(!parserState.input.done && remainingInput.length < text.length && text.startsWith(remainingInput)) {
+      return {
+        ...parserState,
+        index: parserState.index + remainingInput.length,
+        status: ParserStateStatus.PARTIAL,
+        result: remainingInput,
+      }
+    }
+
+    if(!parserState.input.value.startsWith(text, parserState.index)) {
+      return {
+        ...parserState,
+        status: ParserStateStatus.ERROR,
+        error: new Error(`Expected "${text}", but got "${parserState.input.value.slice(parserState.index, parserState.index + text.length)}"`),
+      }
+    }
+
+    return {
+      ...parserState,
+      index: parserState.index + text.length,
+      status: ParserStateStatus.COMPLETE,
+      result: text,
+    }
+  })
+
+  describe("parser.parseString", () => {
+    test("should return success state on successful match", () => {
+      const result = helloParser.parseString("Hello, world!")
+
+      expect(result).toMatchObject({
+        input: {
+          value: expect.any(String),
+          done: true
+        },
+        cacheMap: expect.any(Map),
+        status: ParserStateStatus.COMPLETE,
+        result: expect.anything(),
+        index: expect.any(Number),
+        error: null,
+      })
+    })
+
+    test("should return error state on failed match", () => {
+      const result = helloParser.parseString("Hi, world!")
+
+      expect(result).toMatchObject({
+        input: {
+          value: expect.any(String),
+          done: true
+        },
+        cacheMap: expect.any(Map),
+        status: ParserStateStatus.ERROR,
+        result: expect.toBeOneOf([
+          expect.anything(),
+          null, undefined
+        ]),
+        index: expect.any(Number),
+        error: expect.any(Error),
+      })
+    })
+  })
+
+  describe("parser.parseIterable", () => {
+    test("should return iterable of parser states", () => {
+      const { input } = createTestSequence([
+        ["", null],
+        ["Hello", null],
+        ["", null],
+        [", ", null],
+        ["", null],
+        ["world!", null],
+      ])
+
+      const iterableResult = helloParser.parseIterable(input)
+
+      expect(iterableResult[Symbol.iterator]).toBeDefined()
+      expect(typeof iterableResult[Symbol.iterator]).toBe("function")
+
+      for(let result of iterableResult) {
+        expect(result).toMatchObject({
+          input: {
+            value: expect.any(String),
+            done: expect.any(Boolean)
+          },
+          cacheMap: expect.any(Map),
+          status: expect.toBeOneOf([
+            ParserStateStatus.PARTIAL,
+            ParserStateStatus.COMPLETE,
+            ParserStateStatus.ERROR
+          ]),
+          result: expect.toBeOneOf([
+            expect.anything(),
+            null, undefined
+          ]),
+          index: expect.any(Number),
+          error: expect.toBeOneOf([
+            expect.anything(),
+            null, undefined
+          ]),
+        })
+      }
+    })
+  })
 })
 
 describe("literal", () => {
