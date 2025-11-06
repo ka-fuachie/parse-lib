@@ -76,6 +76,22 @@ class Parser {
     this.#stateTransformFn = stateTransformFn
   }
 
+  /**
+    * @template S
+    * @param {(result: T) => S} fn
+    */
+  map(fn) {
+    return new Parser(parserState => {
+      const newState = this.transform(parserState)
+      if(newState.status === ParserStateStatus.ERROR) return newState
+
+      return {
+        ...newState,
+        result: fn(newState.result)
+      }
+    })
+  }
+
   /** @param {ParserState} parserState */
   transform(parserState) {
     if(isErrorState(parserState)) return parserState

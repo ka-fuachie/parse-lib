@@ -69,6 +69,21 @@ describe("Parser", () => {
     }
   })
 
+  describe("parser.map", () => {
+    const helloParserWithUpperCaseResult = helloParser.map(result => result.toUpperCase())
+
+    test("should be a new instance of Parser", () => {
+      expect(helloParserWithUpperCaseResult).toBeInstanceOf(Parser)
+      expect(helloParserWithUpperCaseResult).not.toBe(helloParser)
+    })
+
+    test("should transform parser result", () => {
+      const result = helloParserWithUpperCaseResult.parseString("Hello, world!")
+
+      expect(result.result).toMatch("HELLO")
+    })
+  })
+
   describe("parser.parseString", () => {
     test("should return success state on successful match", () => {
       const result = helloParser.parseString("Hello, world!")
