@@ -185,10 +185,6 @@ class Parser {
     yield currentParserState
     return currentParserState
   }
-
-  /** @param {AsyncIterable<string>} input */
-  async *parseAsyncIterable(input) {
-  }
 }
 
 /**
