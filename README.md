@@ -1,6 +1,13 @@
 # Parse-lib
 Parse-lib is a javascript parser combinator library designed for streaming data inputs. It is build on packrat parsing techniques to ensure parsing with linear time complexity. The library provides a set of utility parsers and combinators to build complex parsers from simple ones, allowing for easy construction of parsers for various data formats.
 
+## Installation
+```bash
+npm i @ka-fuachie/parse-lib
+```
+
+*Package name is currently a placeholder, subject to change*
+
 ## API
 
 ### Parser
