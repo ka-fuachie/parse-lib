@@ -170,7 +170,7 @@ class Parser {
       currentParserState = nextParserState
       yield currentParserState
 
-      if(currentParserState.status !== ParserStateStatus.PARTIAL) return currentParserState
+      if(currentParserState.status !== ParserStateStatus.PARTIAL) return
     }
 
     currentParserState = /**@type{ParserState<T>}*/(this.transform({
@@ -183,7 +183,56 @@ class Parser {
     }))
 
     yield currentParserState
-    return currentParserState
+  }
+
+  /** @param {AsyncIterable<string>} input */
+  async *parseAsyncIterable(input) {
+    /** @satisfies {ParserState} */
+    const parserState = {
+      input: { value: "", done: false },
+      index: 0,
+      status: ParserStateStatus.PARTIAL,
+      result: null,
+      error: null,
+      cacheMap: new Map(),
+    }
+
+    /** @type {ParserState<T>} */
+    let currentParserState = parserState
+    let currentInputValue = ""
+
+    for await(let chunk of input) {
+      currentInputValue += chunk
+      const nextParserState = /**@type{ParserState<T>}*/(this.transform({
+        ...currentParserState,
+        input: {
+          value: currentInputValue,
+          done: false,
+        },
+        index: 0,
+      }))
+
+      // @ts-ignore
+      if(nextParserState.status === ParserStateStatus.ERROR && nextParserState.error instanceof ParserUnexpectedEndOfInputError) continue
+      if(currentParserState.input.value === nextParserState.input.value && currentParserState.index === nextParserState.index && currentParserState.status === nextParserState.status) continue
+
+      currentParserState = nextParserState
+      yield currentParserState
+
+      if(currentParserState.status !== ParserStateStatus.PARTIAL) return
+    }
+
+    currentParserState = /**@type{ParserState<T>}*/(this.transform({
+      ...currentParserState,
+      input: {
+        value: currentInputValue,
+        done: true,
+      },
+      index: 0,
+    }))
+
+    yield currentParserState
+  }
   }
 }
 

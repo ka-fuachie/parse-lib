@@ -90,6 +90,39 @@ for (const result of helloWorldParser.parseIterable(getInput())) {
 // }
 ```
 
+##### `Parser.parseAsycIterable()`
+Takes an async iterable input and returns an async iterable of the result of parsing the input using the parser. It yields intermediate results till the parser reaches a completed state
+
+```js
+async function* getInput() {
+    yield "Hello"
+    await new Promise(resolve => setTimeout(resolve, 100)) // Simulate async delay
+    yield " World!"
+}
+
+const helloWorldParser = sequenceOf([
+    literal("Hello"),
+    literal(" "),
+    literal("World!")
+])
+
+for await(const result of helloWorldParser.parseAsyncIterable(getInput())) {
+    console.log(result)
+}
+// {
+//     status: "partial",
+//     index: 5,
+//     result: ["Hello", undefined, undefined],
+//     error: null
+// }
+// {
+//     status: "complete",
+//     index: 13,
+//     result: ["Hello", " ", "World!"],
+//     error: null
+// }
+```
+
 ### ParserStateStatus
 Enum of a parser state status
 
@@ -356,7 +389,7 @@ console.log(arrayParser.parseString('[1,["two",3],4]'))
 
 ## Roadmap to v0.1.0
 
-- [ ] `.parseAsyncIterable()` - Parse async iterable inputs
+- [x] `.parseAsyncIterable()` - Parse async iterable inputs
 - [ ] `.parseReadableStream()` - Parse ReadableStream inputs
 - [ ] `.createParserTransformStream()` - Create transform streams from parsers
 - [ ] Support for left recursion in grammars

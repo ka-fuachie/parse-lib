@@ -162,6 +162,53 @@ describe("Parser", () => {
       }
     })
   })
+
+  describe("parser.parseAsyncIterable", () => {
+    test("should return async iterable of parser states", async () => {
+      const { input: _input } = createTestSequence([
+        ["", null],
+        ["Hello", null],
+        ["", null],
+        [", ", null],
+        ["", null],
+        ["world!", null],
+      ])
+      const input = (async function*() {
+        for await (let chunk of _input) {
+          yield chunk
+        }
+      })()
+
+      const asyncIterableResult = helloParser.parseAsyncIterable(input)
+
+      expect(asyncIterableResult[Symbol.asyncIterator]).toBeDefined()
+      expect(typeof asyncIterableResult[Symbol.asyncIterator]).toBe("function")
+
+      for await(let result of asyncIterableResult) {
+        expect(result).toMatchObject({
+          input: {
+            value: expect.any(String),
+            done: expect.any(Boolean)
+          },
+          cacheMap: expect.any(Map),
+          status: expect.toBeOneOf([
+            ParserStateStatus.PARTIAL,
+            ParserStateStatus.COMPLETE,
+            ParserStateStatus.ERROR
+          ]),
+          result: expect.toBeOneOf([
+            expect.anything(),
+            null, undefined
+          ]),
+          index: expect.any(Number),
+          error: expect.toBeOneOf([
+            expect.anything(),
+            null, undefined
+          ]),
+        })
+      }
+    })
+  })
 })
 
 describe("literal", () => {
