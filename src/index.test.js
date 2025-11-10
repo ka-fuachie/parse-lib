@@ -376,8 +376,8 @@ describe("anyChar", () => {
 })
 
 describe("charFrom", () => {
-  const helloCharactersParser = charFrom("H", "e", "l", "o")
-  const letterParser = charFrom(["a", "z"], ["A", "Z"])
+  const helloCharactersParser = charFrom("Helo")
+  const letterParser = charFrom("a-zA-Z")
 
   test("should parse character from character set", () => {
     const result1 = helloCharactersParser.parseString("H")
@@ -941,7 +941,7 @@ describe("lazy", () => {
   const singleItemNumberArrayParser = lazy(singleItemNumberArrayParserThunk)
   const arrayValueParser = oneOf(
     singleItemNumberArrayParser,
-    charFrom(["0", "9"])
+    charFrom("0-9")
   )
 
   test("should lazily evaluate parser thunk", () => {

@@ -357,8 +357,35 @@ const anyChar = new Parser(parserState => {
   }
 })
 
-/** @param {(string | [string, string])[]} charSet */
-function charFrom(...charSet) {
+const CharSetItemType = /**@type{const}*/({
+  RANGE: "range",
+  CHAR: "char",
+})
+const charSetPattern = oneOrMore(
+  oneOf(
+    sequenceOf(anyChar, literal("-"), anyChar).map(r => ({
+      type: CharSetItemType.RANGE,
+      start: r[0],
+      end: r[2]
+    })),
+    anyChar.map(c => ({
+      type: CharSetItemType.CHAR,
+      value: c
+    }))
+  )
+)
+
+/**
+  * @param {string} pattern
+  */
+function charFrom(pattern) {
+  const parsedPattern = charSetPattern.parseString(pattern)
+  if(parsedPattern.status === ParserStateStatus.ERROR) {
+    throw new Error("Invalid pattern", { cause: parsedPattern.error })
+  }
+
+  const charSet = parsedPattern.result
+
   return new Parser(parserState => {
     if(parserState.index >= parserState.input.value.length) {
       return {
@@ -370,8 +397,7 @@ function charFrom(...charSet) {
 
     for(let i = 0; i < charSet.length; i++) {
       const charOrRange = charSet[i]
-
-      if(typeof charOrRange === "string" && parserState.input.value[parserState.index] === charOrRange) {
+      if(charOrRange.type === "char" && parserState.input.value[parserState.index] === charOrRange.value) {
         return {
           ...parserState,
           status: ParserStateStatus.COMPLETE,
@@ -380,8 +406,11 @@ function charFrom(...charSet) {
         }
       }
 
-      if(Array.isArray(charOrRange)) {
-        const [start, end] = charOrRange.map(c => c.charCodeAt(0)).sort((a, b) => a - b)
+      if(charOrRange.type === "range") {
+        const [start, end] = [
+          charOrRange.start.charCodeAt(0),
+          charOrRange.end.charCodeAt(0)
+        ].sort((a, b) => a - b)
         const charCode = parserState.input.value[parserState.index].charCodeAt(0)
 
         if(charCode >= start && charCode <= end) {

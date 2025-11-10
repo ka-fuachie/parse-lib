@@ -24,7 +24,7 @@ Instance of parser returned by all parser methods
 Returns a new parser that transforms the parse result using the passed function param. Useful for applying structure to parse results
 
 ```js
-const digitParser = charFrom(["0", "9"]).map(d => ({
+const digitParser = charFrom("0-9").map(d => ({
     type: "digit",
     value: d
 }))
@@ -183,10 +183,10 @@ anyChar().parseString("abc")
 ```
 
 ### charFrom
-Takes a list of characters or character ranges and returns a parser that matches any single character from the list or range
+Takes a string pattern of characters or character ranges and returns a parser that matches any single character from the character set
 
 ```js
-charFrom("a", "b", "c").parseString("cat")
+charFrom("abc").parseString("cat")
 // {
 //     status: "complete",
 //     index: 1,
@@ -194,7 +194,7 @@ charFrom("a", "b", "c").parseString("cat")
 //     error: null
 // }
 
-charFrom(["0", "9"]).parseString("5abc") // Ranges are passed as 2-element tuples
+charFrom("0-9").parseString("5abc") // Ranges are passed as 2-element tuples
 // {
 //     status: "complete",
 //     index: 1,
@@ -248,8 +248,8 @@ Takes a list of parsers and returns the result of the first successful parser. I
 
 ```js
 const digitOrLetterParser = oneOf([
-    charFrom(["0", "9"]),
-    charFrom(["a", "z"], ["A", "Z"])
+    charFrom("0-9"),
+    charFrom("a-zA-Z")
 ])
 
 console.log(digitOrLetterParser.parseString("5abc"))
