@@ -16,6 +16,7 @@ Instance of parser returned by all parser methods
 
 > [!CAUTION]
 > Parsers should not be created directly as instances of this class, the api is subject to change
+> Also, some considerations for creating custom parsers are not documented yet
 
 #### Instance methods
 
