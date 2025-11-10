@@ -233,6 +233,62 @@ class Parser {
 
     yield currentParserState
   }
+
+  createParserStream() {
+    /** @satisfies {ParserState} */
+    const parserState = {
+      input: { value: "", done: false },
+      index: 0,
+      status: ParserStateStatus.PARTIAL,
+      result: null,
+      error: null,
+      cacheMap: new Map(),
+    }
+
+    /** @type {ParserState<T>} */
+    let currentParserState = parserState
+    let currentInputValue = ""
+
+    const thisParser = this
+    /** @type {TransformStream<string, ParserState<T>>} */
+    const stream = new TransformStream({
+      transform(chunk, controller) {
+        currentInputValue += chunk
+        const nextParserState = /**@type{ParserState<T>}*/(thisParser.transform({
+          ...currentParserState,
+          input: {
+            value: currentInputValue,
+            done: false,
+          },
+          index: 0,
+        }))
+
+        // @ts-ignore
+        if(nextParserState.status === ParserStateStatus.ERROR && nextParserState.error instanceof ParserUnexpectedEndOfInputError) return
+        if(currentParserState.input.value === nextParserState.input.value && currentParserState.index === nextParserState.index && currentParserState.status === nextParserState.status) return
+
+        currentParserState = nextParserState
+        controller.enqueue(currentParserState)
+
+        if(currentParserState.status !== ParserStateStatus.PARTIAL) controller.terminate()
+      },
+
+      flush(controller) {
+        currentParserState = /**@type{ParserState<T>}*/(thisParser.transform({
+          ...currentParserState,
+          input: {
+            value: currentInputValue,
+            done: true,
+          },
+          index: 0,
+        }))
+
+        controller.enqueue(currentParserState)
+        controller.terminate()
+      }
+    })
+
+    return stream
   }
 }
 

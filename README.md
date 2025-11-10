@@ -123,6 +123,28 @@ for await(const result of helloWorldParser.parseAsyncIterable(getInput())) {
 // }
 ```
 
+##### `Parser.createParserStream()`
+Returns a TransformStream that takes string chunks as input and outputs parser states as output. Useful for integrating with web streams
+
+```js
+const readableStream = new ReadableStream({
+    start(controller) {
+        controller.enqueue("Hello")
+        controller.enqueue(" World!")
+        controller.close()
+    }
+})
+
+const helloWorldParser = sequenceOf([
+    literal("Hello"),
+    literal(" "),
+    literal("World!")
+])
+const parserStream = helloWorldParser.createParserStream()
+
+const transformedStream = readableStream.pipeThrough(parserStream) // Stream of parser states
+```
+
 ### ParserStateStatus
 Enum of a parser state status
 
@@ -390,8 +412,7 @@ console.log(arrayParser.parseString('[1,["two",3],4]'))
 ## Roadmap to v0.1.0
 
 - [x] `.parseAsyncIterable()` - Parse async iterable inputs
-- [ ] `.parseReadableStream()` - Parse ReadableStream inputs
-- [ ] `.createParserTransformStream()` - Create transform streams from parsers
+- [x] `.createParseStream()` - Create transform streams from parsers
 - [ ] Support for left recursion in grammars
 
 ## Acknowledgements

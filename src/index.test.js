@@ -209,6 +209,58 @@ describe("Parser", () => {
       }
     })
   })
+
+  describe("parser.createParserStream", () => {
+    test("should return stream that transforms string to parser states", async () => {
+      const { input: _input } = createTestSequence([
+        ["", null],
+        ["Hello", null],
+        ["", null],
+        [", ", null],
+        ["", null],
+        ["world!", null],
+      ])
+      const input = new ReadableStream({
+        pull(controller) {
+          const { value, done } = _input.next()
+          if(done) {
+            controller.close()
+            return
+          }
+          controller.enqueue(value)
+        }
+      })
+
+      const helloParserStream = helloParser.createParserStream()
+
+      expect(helloParserStream).toBeInstanceOf(TransformStream)
+
+      const streamResult = input.pipeThrough(helloParserStream)
+      for await(let result of streamResult) {
+        expect(result).toMatchObject({
+          input: {
+            value: expect.any(String),
+            done: expect.any(Boolean)
+          },
+          cacheMap: expect.any(Map),
+          status: expect.toBeOneOf([
+            ParserStateStatus.PARTIAL,
+            ParserStateStatus.COMPLETE,
+            ParserStateStatus.ERROR
+          ]),
+          result: expect.toBeOneOf([
+            expect.anything(),
+            null, undefined
+          ]),
+          index: expect.any(Number),
+          error: expect.toBeOneOf([
+            expect.anything(),
+            null, undefined
+          ]),
+        })
+      }
+    })
+  })
 })
 
 describe("literal", () => {
